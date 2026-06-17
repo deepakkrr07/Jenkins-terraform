@@ -2,16 +2,24 @@ pipeline {
     agent any
 
     stages {
-        stage('Initialize') {
+
+        stage('Terraform Init') {
             steps {
-                script {
+                dir('01_VPC_terraform-manifests') {
                     sh 'terraform init'
-                    sh 'echo "Terraform initialization complete."'
-                    sh 'terraform fmt'
-                    sh 'terraform validate'
+                }
+            }
+        }
+
+        stage('Terraform Plan') {
+            steps {
+                dir('01_VPC_terraform-manifests') {
                     sh 'terraform plan'
                 }
             }
         }
+
     }
 }
+
+
