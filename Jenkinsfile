@@ -3,6 +3,16 @@ pipeline {
 
     stages {
 
+        stage('checking directory') {
+            steps {
+                   sh '''
+                   pwd
+                   ls -R
+                   '''
+                }
+            }
+        }
+
         stage('Terraform Init') {
             steps {
                 dir('01_VPC_terraform-manifests') {
