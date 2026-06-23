@@ -1,9 +1,15 @@
+##############################################
+# Discover latest ExternalDNS addon version
+##############################################
 data "aws_eks_addon_version" "externaldns_latest" {
   addon_name         = "external-dns"
   kubernetes_version = aws_eks_cluster.main.version
   most_recent        = true
 }
 
+##############################################
+# Install ExternalDNS Add-on
+##############################################
 resource "aws_eks_addon" "externaldns" {
   depends_on = [
     aws_iam_role.externaldns_role,
@@ -27,6 +33,9 @@ resource "aws_eks_addon" "externaldns" {
   }
 }
 
+##############################################
+# Outputs
+##############################################
 output "externaldns_addon_version" {
   value = aws_eks_addon.externaldns.addon_version
 }
