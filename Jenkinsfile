@@ -1,9 +1,11 @@
+
 pipeline {
     agent any
 
     environment {
         AWS_REGION = 'us-east-1'
         TF_DIR = '01_VPC_terraform-manifests'
+        ENV = 'dev'   // change to prod later or pass as parameter
     }
 
     stages {
@@ -19,12 +21,12 @@ pipeline {
         stage('Terraform Init') {
             steps {
                 dir("${TF_DIR}") {
-                    sh '''
+                    sh """
                     terraform init \
                     -backend-config="bucket=jenkins-prod-terraform-state-demo" \
-                    -backend-config="key=vpc/dev/terraform.tfstate" \
-                    -backend-config="region=$AWS_REGION"
-                    '''
+                    -backend-config="key=\${ENV}/vpc/terraform.tfstate" \
+                    -backend-config="region=${AWS_REGION}"
+                    """
                 }
             }
         }
@@ -53,12 +55,17 @@ pipeline {
             }
         }
 
+        // ✅ ENTERPRISE APPROVAL CONTROL
         stage('Approval') {
             when {
-                branch 'main'
+                expression {
+                    return env.ENV == 'prod'
+                }
             }
             steps {
-                input message: 'Approve Terraform Apply?'
+                timeout(time: 10, unit: 'MINUTES') {
+                    input message: "Approve deployment to ${ENV}?", ok: "Approve"
+                }
             }
         }
 
@@ -73,10 +80,10 @@ pipeline {
 
     post {
         success {
-            echo '✅ Infrastructure deployed successfully'
+            echo "✅ Deployment to ${ENV} successful"
         }
         failure {
-            echo '❌ Deployment failed - check logs'
+            echo "❌ Deployment failed"
         }
     }
 }
