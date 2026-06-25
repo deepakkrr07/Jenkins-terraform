@@ -1,0 +1,67 @@
+pipeline {
+    agent any
+
+    environment {
+        AWS_REGION = 'us-east-1'
+        CLUSTER_NAME = 'retail-dev-eksdemo1'
+        CHART_PATH = '03_RetailStore_Helm_with_Data_Plane/01_retailstore_charts_updates/charts_base/retail-store-sample-cart-chart'
+    }
+
+    stages {
+
+        stage('Clean Workspace') {
+            steps {
+                deleteDir()
+            }
+        }
+
+        stage('Checkout Code') {
+            steps {
+                checkout scm
+            }
+        }
+
+        stage('Configure Kubeconfig') {
+            steps {
+                sh '''
+                aws eks --region $AWS_REGION update-kubeconfig --name $CLUSTER_NAME
+                '''
+            }
+        }
+
+        stage('Verify Cluster') {
+            steps {
+                sh 'kubectl get nodes'
+            }
+        }
+
+        stage('Helm Deploy - Cart Service') {
+            steps {
+                sh '''
+                helm upgrade --install cart $CHART_PATH \
+                --namespace default \
+                --create-namespace
+                '''
+            }
+        }
+
+        stage('Verify Deployment') {
+            steps {
+                sh '''
+                kubectl get pods
+                kubectl get svc
+                '''
+            }
+        }
+    }
+
+    post {
+        success {
+            echo "✅ Cart service deployed successfully"
+        }
+        failure {
+            echo "❌ Deployment failed"
+        }
+    }
+}
+``
