@@ -40,6 +40,23 @@ pipeline {
             }
         }
 
+        
+        stage('DEBUG FILES') {
+            steps {
+                dir("${TF_DIR}") {
+                    sh '''
+                    echo "Current Path:"
+                    pwd
+                    echo "Listing files:"
+                    ls -la
+                    echo "Recursive listing:"
+                    ls -R
+                    '''
+                }
+            }
+        }
+
+
         stage('Security Scan') {
             steps {
                 dir("${TF_DIR}") {
