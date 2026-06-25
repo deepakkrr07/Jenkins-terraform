@@ -6,7 +6,7 @@ data "terraform_remote_state" "vpc" {
 
   config = {
     bucket = "jenkins-prod-terraform-state-demo"     # Name of the remote S3 bucket where the VPC state is stored
-    key    = "vpc/dev/terraform.tfstate"        # Path to the VPC tfstate file within the bucket
+    key    = "dev/vpc/terraform.tfstate"        # Path to the VPC tfstate file within the bucket
     region = var.aws_region                    # Region where the S3 bucket exist
   }
 }
