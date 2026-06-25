@@ -44,7 +44,11 @@ pipeline {
         stage('DEBUG FILES') {
             steps {
                 dir("${TF_DIR}") {
-                    sh '''
+                    sh '''            
+                    echo "FILES:"
+                    ls -l
+                    echo "FILE TYPES:"
+                    file *
                     echo "Current Path:"
                     pwd
                     echo "Listing files:"
