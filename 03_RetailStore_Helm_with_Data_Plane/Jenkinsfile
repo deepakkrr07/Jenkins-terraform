@@ -4,7 +4,8 @@ pipeline {
     environment {
         AWS_REGION = 'us-east-1'
         CLUSTER_NAME = 'retail-dev-eksdemo1'
-        CHART_PATH = '03_RetailStore_Helm_with_Data_Plane/01_retailstore_charts_updates/charts_base/retail-store-sample-cart-chart'
+        HELM_DIR = '03_RetailStore_Helm_with_Data_Plane/01_retailstore_charts_updates/charts_base'
+        NAMESPACE = 'default'
     }
 
     stages {
@@ -24,31 +25,51 @@ pipeline {
         stage('Configure Kubeconfig') {
             steps {
                 sh '''
-                aws eks --region $AWS_REGION update-kubeconfig --name $CLUSTER_NAME
+                mkdir -p ~/.kube
+                
+                aws eks update-kubeconfig \
+                  --region $AWS_REGION \
+                  --name $CLUSTER_NAME
                 '''
             }
         }
 
-        stage('Verify Cluster') {
+        stage('Deploy All Helm Charts') {
             steps {
-                sh 'kubectl get nodes'
-            }
-        }
+                dir("${HELM_DIR}") {
+                    sh '''
+                    set -e
 
-        stage('Helm Deploy - Cart Service') {
-            steps {
-                sh '''
-                helm upgrade --install cart $CHART_PATH \
-                --namespace default \
-                --create-namespace
-                '''
+                    echo "🚀 Deploying all microservices..."
+
+                    for dir in */; do
+                        APP=$(basename $dir)
+
+                        echo "✅ Deploying $APP..."
+
+                        helm upgrade --install $APP $dir \
+                            --namespace $NAMESPACE \
+                            --create-namespace
+
+                        echo "⏳ Waiting for $APP rollout..."
+                        kubectl rollout status deployment/$APP
+
+                        echo "✅ $APP deployed successfully"
+                    done
+
+                    echo "🎉 All services deployed!"
+                    '''
+                }
             }
         }
 
         stage('Verify Deployment') {
             steps {
                 sh '''
+                echo "📦 Pods:"
                 kubectl get pods
+
+                echo "🌐 Services:"
                 kubectl get svc
                 '''
             }
@@ -57,11 +78,10 @@ pipeline {
 
     post {
         success {
-            echo "✅ Cart service deployed successfully"
+            echo "✅ Full application deployed successfully"
         }
         failure {
             echo "❌ Deployment failed"
         }
     }
 }
-
