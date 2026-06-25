@@ -17,12 +17,7 @@ pipeline {
         }
 
         
-        stage('Checkout Full Repo') {
-            steps {
-                checkout scm
-            }
-        }
-        
+       
         stage('Terraform Format Check') {
             steps {
                 dir("${TF_DIR}") {
@@ -52,27 +47,6 @@ pipeline {
                 }
             }
         }
-
-        
-        stage('DEBUG FILES') {
-            steps {
-                dir("${TF_DIR}") {
-                    sh '''            
-                    echo "FILES:"
-                    ls -l
-                    echo "FILE TYPES:"
-                    file *
-                    echo "Current Path:"
-                    pwd
-                    echo "Listing files:"
-                    ls -la
-                    echo "Recursive listing:"
-                    ls -R
-                    '''
-                }
-            }
-        }
-
 
         stage('Security Scan') {
             steps {
