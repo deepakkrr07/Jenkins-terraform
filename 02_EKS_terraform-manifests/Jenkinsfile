@@ -48,6 +48,7 @@ pipeline {
             steps {
                 dir("${TF_DIR}") {
                     sh """
+                    terraform init -reconfigure -upgrade \
                     terraform init -reconfigure \
                     -backend-config="bucket=jenkins-prod-terraform-state-demo" \
                     -backend-config="key=\${ENV}/eks/terraform.tfstate" \
