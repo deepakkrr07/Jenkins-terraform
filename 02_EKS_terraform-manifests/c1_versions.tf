@@ -30,9 +30,9 @@ terraform {
 
   # Remote backend configuration using S3 
   backend "s3" {
-    bucket         = "jenkins-prod-terraform-state-demo"         
+    bucket         = "jenkins-terraform-statefile-1807"         
     key            = "dev/eks/terraform.tfstate"            
-    region         = "us-east-1"                            
+    region         = "ap-southeast-2"                            
     encrypt        = true                                   
     use_lockfile   = true     
   }
