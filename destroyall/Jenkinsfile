@@ -2,94 +2,106 @@ pipeline {
     agent any
 
     environment {
-        AWS_REGION = "ap-southeast-2"
-        CLUSTER_NAME = "retail-dev-eksdemo1"
+        AWS_REGION = 'ap-southeast-2'
+        AWS_DEFAULT_REGION = 'ap-southeast-2'
+        TF_DIR = '02_EKS_terraform-manifests'
+        ENV = 'dev'
     }
 
     stages {
 
-        stage('Configure kubectl') {
+        stage('Clean Workspace') {
             steps {
-                sh '''
-                aws eks update-kubeconfig \
-                  --region ${AWS_REGION} \
-                  --name ${CLUSTER_NAME}
-                '''
+                deleteDir()
             }
         }
 
-        stage('Uninstall Retail Store') {
+        stage('Checkout Code') {
             steps {
-                sh '''
-                helm uninstall retail-store -n retailstore || true
-                '''
+                checkout scm
             }
         }
 
-        stage('Delete Retail Namespace') {
+        stage('Clean Terraform Cache') {
             steps {
-                sh '''
-                kubectl delete ns retailstore --ignore-not-found=true
-                '''
-            }
-        }
-
-        stage('Uninstall Karpenter') {
-            steps {
-                sh '''
-                helm uninstall karpenter -n kube-system || true
-                '''
-            }
-        }
-
-        stage('Uninstall AWS Load Balancer Controller') {
-            steps {
-                sh '''
-                helm uninstall aws-load-balancer-controller \
-                -n kube-system || true
-                '''
-            }
-        }
-
-        stage('Wait for Cleanup') {
-            steps {
-                sh '''
-                sleep 120
-                '''
-            }
-        }
-
-        stage('Destroy Data Plane') {
-            steps {
-                dir('terraform/dataplane') {
+                dir("${TF_DIR}") {
                     sh '''
-                    terraform init
-                    terraform destroy -auto-approve
+                    rm -rf .terraform
+                    rm -f .terraform.lock.hcl
                     '''
                 }
             }
         }
 
-        stage('Destroy EKS') {
+        stage('Terraform Init') {
             steps {
-                dir('terraform/eks') {
-                    sh '''
-                    terraform init
-                    terraform destroy -auto-approve
-                    '''
+                dir("${TF_DIR}") {
+                    sh """
+                    terraform init \
+                      -reconfigure \
+                      -upgrade \
+                      -backend-config="bucket=jenkins-terraform-statefile-1807" \
+                      -backend-config="key=${ENV}/eks/terraform.tfstate" \
+                      -backend-config="region=${AWS_REGION}"
+                    """
                 }
             }
         }
 
-        stage('Destroy VPC') {
+        stage('Terraform Validate') {
             steps {
-                dir('terraform/vpc') {
-                    sh '''
-                    terraform init
-                    terraform destroy -auto-approve
-                    '''
+                dir("${TF_DIR}") {
+                    sh 'terraform validate'
                 }
             }
+        }
+
+        stage('Terraform Plan Destroy') {
+            steps {
+                dir("${TF_DIR}") {
+                    sh 'terraform plan -destroy -out=tfdestroy'
+                }
+            }
+        }
+
+        stage('Approval Before Destroy') {
+            when {
+                expression {
+                    env.ENV == 'prod'
+                }
+            }
+            steps {
+                timeout(time: 10, unit: 'MINUTES') {
+                    input message: "Approve destruction of ${ENV} environment?", ok: "Approve"
+                }
+            }
+        }
+
+        stage('Terraform Destroy') {
+            steps {
+                dir("${TF_DIR}") {
+                    sh 'terraform destroy -auto-approve'
+                }
+            }
+        }
+
+        stage('Verify Cleanup') {
+            steps {
+                sh '''
+                echo "✅ Checking AWS resources after destroy..."
+                aws eks list-clusters --region ${AWS_REGION}
+                aws ec2 describe-instances --region ${AWS_REGION} --filters "Name=tag:Environment,Values=${ENV}"
+                '''
+            }
+        }
+    }
+
+    post {
+        success {
+            echo "✅ Terraform destroy completed successfully for ${ENV} environment."
+        }
+        failure {
+            echo "❌ Terraform destroy failed."
         }
     }
 }
