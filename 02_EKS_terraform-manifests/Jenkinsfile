@@ -2,7 +2,7 @@ pipeline {
     agent any
 
     environment {
-        AWS_REGION = 'us-east-1'
+        AWS_REGION = 'ap-southeast-2'
         AWS_DEFAULT_REGION = 'ap-southeast-2'
         TF_DIR = '02_EKS_terraform-manifests'
         ENV = 'dev'   // change to 'prod' later or parameterize
@@ -51,7 +51,7 @@ pipeline {
                     ]) {
                         sh """
                         terraform init -reconfigure -upgrade \
-                        -backend-config="bucket=jenkins-prod-terraform-state-demo" \
+                        -backend-config="jenkins-terraform-statefile-1807" \
                         -backend-config="key=${ENV}/eks/terraform.tfstate" \
                         -backend-config="region=${AWS_REGION}"
                         """
