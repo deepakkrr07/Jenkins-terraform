@@ -2,7 +2,7 @@ pipeline {
     agent any
 
     environment {
-        AWS_REGION = 'us-east-1'
+        AWS_REGION = 'ap-southeast-2'
         CLUSTER_NAME = 'retail-dev-eksdemo1'
         HELM_DIR = '03_RetailStore_Helm_with_Data_Plane/01_retailstore_charts_updates/charts_base'
         NAMESPACE = 'default'
