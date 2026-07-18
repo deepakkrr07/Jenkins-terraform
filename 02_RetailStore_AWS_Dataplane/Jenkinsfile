@@ -3,7 +3,7 @@ pipeline {
     agent any
 
     environment {
-        AWS_REGION = 'us-east-1'
+        AWS_REGION = 'ap-southeast-2'
         TF_DIR = '02_RetailStore_AWS_Dataplane'
         ENV = 'dev'   // change to prod later or pass as parameter
     }
