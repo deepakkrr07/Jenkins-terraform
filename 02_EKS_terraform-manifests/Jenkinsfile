@@ -97,7 +97,7 @@ pipeline {
                 ]) {
                     sh """
                     mkdir -p ~/.kube
-                    /usr/local/bin/aws eks update-kubeconfig \
+                    /usr/bin/aws eks update-kubeconfig \
                       --region ${AWS_REGION} \
                       --name retail-dev-eksdemo1
                     """
