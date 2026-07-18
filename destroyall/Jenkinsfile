@@ -1,0 +1,95 @@
+pipeline {
+    agent any
+
+    environment {
+        AWS_REGION = "ap-southeast-2"
+        CLUSTER_NAME = "your-cluster-name"
+    }
+
+    stages {
+
+        stage('Configure kubectl') {
+            steps {
+                sh '''
+                aws eks update-kubeconfig \
+                  --region ${AWS_REGION} \
+                  --name ${CLUSTER_NAME}
+                '''
+            }
+        }
+
+        stage('Uninstall Retail Store') {
+            steps {
+                sh '''
+                helm uninstall retail-store -n retailstore || true
+                '''
+            }
+        }
+
+        stage('Delete Retail Namespace') {
+            steps {
+                sh '''
+                kubectl delete ns retailstore --ignore-not-found=true
+                '''
+            }
+        }
+
+        stage('Uninstall Karpenter') {
+            steps {
+                sh '''
+                helm uninstall karpenter -n kube-system || true
+                '''
+            }
+        }
+
+        stage('Uninstall AWS Load Balancer Controller') {
+            steps {
+                sh '''
+                helm uninstall aws-load-balancer-controller \
+                -n kube-system || true
+                '''
+            }
+        }
+
+        stage('Wait for Cleanup') {
+            steps {
+                sh '''
+                sleep 120
+                '''
+            }
+        }
+
+        stage('Destroy Data Plane') {
+            steps {
+                dir('terraform/dataplane') {
+                    sh '''
+                    terraform init
+                    terraform destroy -auto-approve
+                    '''
+                }
+            }
+        }
+
+        stage('Destroy EKS') {
+            steps {
+                dir('terraform/eks') {
+                    sh '''
+                    terraform init
+                    terraform destroy -auto-approve
+                    '''
+                }
+            }
+        }
+
+        stage('Destroy VPC') {
+            steps {
+                dir('terraform/vpc') {
+                    sh '''
+                    terraform init
+                    terraform destroy -auto-approve
+                    '''
+                }
+            }
+        }
+    }
+}
