@@ -5,7 +5,7 @@ data "terraform_remote_state" "eks" {
   backend = "s3"
 
   config = {
-    bucket = "jenkins-prod-terraform-state-demo"     # Name of the remote S3 bucket where the EKS state is stored
+    bucket = "jenkins-terraform-statefile-1807"     # Name of the remote S3 bucket where the EKS state is stored
     key    = "dev/eks/terraform.tfstate"        # Path to the EKS tfstate file within the bucket
     region = var.aws_region                    # Region where the S3 bucket exist
   }
