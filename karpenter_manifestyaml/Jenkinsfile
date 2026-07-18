@@ -1,0 +1,92 @@
+pipeline {
+    agent any
+
+    environment {
+        AWS_REGION = 'ap-southeast-2'
+        CLUSTER_NAME = 'retail-dev-eksdemo1'
+        MANIFEST_DIR = 'karpenter_manifestyaml'
+    }
+
+    stages {
+
+        stage('Clean Workspace') {
+            steps {
+                deleteDir()
+            }
+        }
+
+        stage('Checkout Code') {
+            steps {
+                checkout scm
+            }
+        }
+
+        stage('Verify Tools') {
+            steps {
+                sh '''
+                kubectl version --client
+                aws --version
+                '''
+            }
+        }
+
+        stage('Configure Kubeconfig') {
+            steps {
+                sh '''
+                mkdir -p ~/.kube
+
+                aws eks update-kubeconfig \
+                  --region ${AWS_REGION} \
+                  --name ${CLUSTER_NAME}
+                '''
+            }
+        }
+
+        stage('Verify Cluster') {
+            steps {
+                sh '''
+                kubectl get nodes
+                '''
+            }
+        }
+
+        stage('Deploy EC2NodeClass') {
+            steps {
+                dir("${MANIFEST_DIR}") {
+                    sh '''
+                    kubectl apply -f 01_ec2nodeclass.yaml
+                    '''
+                }
+            }
+        }
+
+        stage('Deploy NodePool') {
+            steps {
+                dir("${MANIFEST_DIR}") {
+                    sh '''
+                    kubectl apply -f nodepool.yaml
+                    '''
+                }
+            }
+        }
+
+        stage('Verify Resources') {
+            steps {
+                sh '''
+                kubectl get ec2nodeclass
+                kubectl get nodepool
+                '''
+            }
+        }
+    }
+
+    post {
+        success {
+            echo "✅ Karpenter manifests deployed successfully."
+        }
+
+        failure {
+            echo "❌ Deployment failed."
+        }
+    }
+}
