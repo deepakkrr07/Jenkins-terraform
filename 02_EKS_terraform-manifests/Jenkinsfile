@@ -3,7 +3,7 @@ pipeline {
 
     environment {
         AWS_REGION = 'us-east-1'
-        AWS_DEFAULT_REGION = 'us-east-1'
+        AWS_DEFAULT_REGION = 'ap-southeast-2'
         TF_DIR = '02_EKS_terraform-manifests'
         ENV = 'dev'   // change to 'prod' later or parameterize
     }
