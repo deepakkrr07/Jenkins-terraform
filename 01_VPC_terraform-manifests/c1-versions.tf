@@ -10,7 +10,7 @@ terraform {
   backend "s3" {
     bucket       = "jenkins-terraform-statefile-1807"
     key          = "dev/vpc/terraform.tfstate"
-    region       = "us-east-1"
+    region       = "ap-southeast-2"
     encrypt      = true
     use_lockfile = true
   }
