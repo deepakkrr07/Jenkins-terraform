@@ -88,6 +88,15 @@ pipeline {
                 }
             }
         }
+        stage('Debug AWS') {
+            steps {
+                sh '''
+                which aws
+                aws --version
+                '''
+            }
+        }
+        
 
         stage('Configure Kubeconfig') {
             steps {
