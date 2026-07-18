@@ -83,8 +83,7 @@ pipeline {
         }
 
 
-        
-        stage('Deploy or Cleanup') {
+       stage('Deploy or Cleanup') {
             steps {
                 script {
                     if (params.ACTION == 'deploy') {
@@ -92,22 +91,20 @@ pipeline {
                             sh '''
                             set -e
                             echo "Deploying Retail Store ${APP_VERSION}"
-
+        
                             for chart in */ ; do
                                 APP=$(basename "$chart")
                                 echo "------------------------------------------"
                                 echo "Deploying $APP"
                                 echo "------------------------------------------"
-
+        
                                 helm upgrade --install "$APP" "$chart" \
                                     --namespace ${NAMESPACE} \
                                     --create-namespace \
                                     --wait
-
+        
                                 echo "$APP deployment completed"
                             done
-
-                            kubectl apply -f 03_RetailStore_Helm_with_Data_Plane/kubernetes/retail-ingress.yaml
                             '''
                         }
                     } else {
@@ -115,10 +112,10 @@ pipeline {
                         set -e
                         echo "========== Deleting Helm Releases =========="
                         helm list -n ${NAMESPACE} -q | xargs -r -n1 helm uninstall -n ${NAMESPACE}
-
+        
                         echo "========== Deleting Ingress =========="
                         kubectl delete -f 03_RetailStore_Helm_with_Data_Plane/kubernetes/retail-ingress.yaml --ignore-not-found
-
+        
                         echo "========== Deleting Namespace =========="
                         kubectl delete namespace ${NAMESPACE} --ignore-not-found
                         '''
@@ -126,6 +123,9 @@ pipeline {
                 }
             }
         }
+
+ 
+  
 
         stage('Verify State') {
             steps {
