@@ -1,11 +1,18 @@
 pipeline {
     agent any
 
+    parameters {
+        choice(
+            name: 'APP_VERSION',
+            choices: ['v1', 'v2'],
+            description: 'Select Retail Store application version'
+        )
+    }
+
     environment {
-        AWS_REGION = 'ap-southeast-2'
+        AWS_REGION   = 'ap-southeast-2'
         CLUSTER_NAME = 'retail-dev-eksdemo1'
-        HELM_DIR = '03_RetailStore_Helm_with_Data_Plane/01_retailstore_charts_updates/charts_base'
-        NAMESPACE = 'default'
+        NAMESPACE    = 'retailstore'
     }
 
     stages {
@@ -22,43 +29,65 @@ pipeline {
             }
         }
 
+        stage('Set Helm Chart Path') {
+            steps {
+                script {
+                    if (params.APP_VERSION == 'v1') {
+                        env.HELM_DIR = "03_RetailStore_Helm_with_Data_Plane/01_retailstore_charts_updates/charts_v1.0.0"
+                    } else {
+                        env.HELM_DIR = "03_RetailStore_Helm_with_Data_Plane/01_retailstore_charts_updates/charts_v2.0.0"
+                    }
+
+                    echo "Selected Version : ${params.APP_VERSION}"
+                    echo "Helm Directory   : ${env.HELM_DIR}"
+                }
+            }
+        }
+
         stage('Configure Kubeconfig') {
             steps {
                 sh '''
                 mkdir -p ~/.kube
-                
+
                 aws eks update-kubeconfig \
-                  --region $AWS_REGION \
-                  --name $CLUSTER_NAME
+                    --region ${AWS_REGION} \
+                    --name ${CLUSTER_NAME}
                 '''
             }
         }
 
-        stage('Deploy All Helm Charts') {
+        stage('Verify Cluster') {
+            steps {
+                sh '''
+                kubectl get nodes
+                '''
+            }
+        }
+
+        stage('Deploy Retail Store') {
             steps {
                 dir("${HELM_DIR}") {
                     sh '''
                     set -e
-                    
-                    echo "🚀 Deploying all microservices..."
-                    
-                    for dir in */; do
-                        APP=$(basename $dir)
-                    
-                        echo "✅ Deploying $APP..."
-                    
-                        helm upgrade --install $APP $dir \
-                            --namespace $NAMESPACE \
-                            --create-namespace
-                    
-                        echo "⏳ Waiting for $APP rollout..."
-                    
-                        kubectl rollout status deployment -l app.kubernetes.io/instance=$APP
-                    
-                        echo "✅ $APP deployed successfully"
+
+                    echo "Deploying Retail Store ${APP_VERSION}"
+
+                    for chart in */ ; do
+
+                        APP=$(basename "$chart")
+
+                        echo "------------------------------------------"
+                        echo "Deploying $APP"
+                        echo "------------------------------------------"
+
+                        helm upgrade --install "$APP" "$chart" \
+                            --namespace ${NAMESPACE} \
+                            --create-namespace \
+                            --wait
+
+                        echo "$APP deployment completed"
+
                     done
-                    
-                    echo "🎉 All services deployed!"
                     '''
                 }
             }
@@ -67,11 +96,23 @@ pipeline {
         stage('Verify Deployment') {
             steps {
                 sh '''
-                echo "📦 Pods:"
-                kubectl get pods
+                echo "========== Helm Releases =========="
+                helm list -n ${NAMESPACE}
 
-                echo "🌐 Services:"
-                kubectl get svc
+                echo ""
+
+                echo "========== Pods =========="
+                kubectl get pods -n ${NAMESPACE}
+
+                echo ""
+
+                echo "========== Services =========="
+                kubectl get svc -n ${NAMESPACE}
+
+                echo ""
+
+                echo "========== Deployments =========="
+                kubectl get deploy -n ${NAMESPACE}
                 '''
             }
         }
@@ -79,10 +120,11 @@ pipeline {
 
     post {
         success {
-            echo "✅ Full application deployed successfully"
+            echo "Retail Store ${params.APP_VERSION} deployed successfully."
         }
+
         failure {
-            echo "❌ Deployment failed"
+            echo "Retail Store deployment failed."
         }
     }
 }
