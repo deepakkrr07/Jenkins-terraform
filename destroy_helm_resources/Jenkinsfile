@@ -66,6 +66,16 @@ pipeline {
             }
         }
 
+        stage('Debug Workspace') {
+            steps {
+                sh '''
+                echo "Current workspace: $(pwd)"
+                ls -R 03_RetailStore_Helm_with_Data_Plane/kubernetes
+                '''
+            }
+        }
+
+
         stage('Deploy or Cleanup') {
             steps {
                 script {
