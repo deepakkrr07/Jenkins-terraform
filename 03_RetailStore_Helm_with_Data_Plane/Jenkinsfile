@@ -93,6 +93,14 @@ pipeline {
             }
         }
 
+        stage('Deploy Ingress') {
+            steps {
+                sh '''
+                kubectl apply -f 03_RetailStore_Helm_with_Data_Plane/kubernetes/retail-ingress.yaml
+                '''
+            }
+        }
+
         stage('Verify Deployment') {
             steps {
                 sh '''
