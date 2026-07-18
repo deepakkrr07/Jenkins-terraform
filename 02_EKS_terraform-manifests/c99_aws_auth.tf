@@ -11,7 +11,7 @@ provider "kubectl" {
 
   exec {
     api_version = "client.authentication.k8s.io/v1beta1"
-    command     = "/usr/local/bin/aws"
+    command     = "/usr/bin/aws"
 
     args = [
       "eks",
