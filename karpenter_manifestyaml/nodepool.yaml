@@ -28,7 +28,7 @@ spec:
         # Cheaper, smaller instance families
         - key: karpenter.k8s.aws/instance-family
           operator: In
-          values: ["t2", "t2a"]  # All burstable, budget-friendly
+          values: ["t2"]  # All burstable, budget-friendly
         # Limit to smaller sizes only
         - key: karpenter.k8s.aws/instance-size
           operator: In
