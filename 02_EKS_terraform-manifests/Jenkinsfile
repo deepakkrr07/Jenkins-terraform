@@ -51,7 +51,7 @@ pipeline {
                     ]) {
                         sh """
                         terraform init -reconfigure -upgrade \
-                        -backend-config="bucket=jenkins-terraform-statefile-1807"
+                        -backend-config="bucket=jenkins-terraform-statefile-1807" \
                         -backend-config="key=${ENV}/eks/terraform.tfstate" \
                         -backend-config="region=${AWS_REGION}"
                         """
