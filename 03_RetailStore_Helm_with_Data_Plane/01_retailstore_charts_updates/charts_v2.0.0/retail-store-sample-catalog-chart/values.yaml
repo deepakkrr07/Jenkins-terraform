@@ -88,7 +88,7 @@ app:
       useSecretsManager: false  # Enable to use AWS Secrets Manager
       secretsManager:
         secretName: "retailstore-db-secret-1"  # AWS Secrets Manager secret name
-        region: "us-east-1"  # AWS region
+        region: "ap-southeast-2"  # AWS region
 
 mysql:
   create: false
