@@ -3,7 +3,7 @@ pipeline {
     agent any
 
     environment {
-        AWS_REGION = 'us-east-1'
+        AWS_REGION = 'ap-southeast-2'
         TF_DIR = '03_KARPENTER_terraform-manifests'
         ENV = 'dev'   // change to prod later or pass as parameter
     }
@@ -24,7 +24,7 @@ pipeline {
                 dir("${TF_DIR}") {
                     sh """
                     terraform init -reconfigure \
-                    -backend-config="bucket=jenkins-prod-terraform-state-demo" \
+                    -backend-config="bucket=jenkins-terraform-statefile-1807" \
                     -backend-config="key=\${ENV}/karpenter/terraform.tfstate" \
                     -backend-config="region=${AWS_REGION}"
                     """
