@@ -15,7 +15,7 @@ terraform {
   backend "s3" {
     bucket         = "jenkins-prod-terraform-state-demo"         
     key            = "dev/retail-persistent-endpoints/terraform.tfstate"            
-    region         = "us-east-1"                            
+    region         = "ap-southeast-2"                            
     encrypt        = true                                   
     use_lockfile   = true     
   }
