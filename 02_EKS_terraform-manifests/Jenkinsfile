@@ -5,7 +5,7 @@ pipeline {
         AWS_REGION = 'ap-southeast-2'
         AWS_DEFAULT_REGION = 'ap-southeast-2'
         TF_DIR = '02_EKS_terraform-manifests'
-        ENV = 'dev'   // change to 'prod' later or parameterize
+        ENV = 'dev'
     }
 
     stages {
@@ -45,17 +45,14 @@ pipeline {
         stage('Terraform Init') {
             steps {
                 dir("${TF_DIR}") {
-                    withEnv([
-                        "AWS_REGION=${AWS_REGION}",
-                        "AWS_DEFAULT_REGION=${AWS_DEFAULT_REGION}"
-                    ]) {
-                        sh """
-                        terraform init -reconfigure -upgrade \
-                        -backend-config="bucket=jenkins-terraform-statefile-1807" \
-                        -backend-config="key=${ENV}/eks/terraform.tfstate" \
-                        -backend-config="region=${AWS_REGION}"
-                        """
-                    }
+                    sh """
+                    terraform init \
+                      -reconfigure \
+                      -upgrade \
+                      -backend-config="bucket=jenkins-terraform-statefile-1807" \
+                      -backend-config="key=${ENV}/eks/terraform.tfstate" \
+                      -backend-config="region=${AWS_REGION}"
+                    """
                 }
             }
         }
@@ -79,31 +76,25 @@ pipeline {
         stage('Terraform Plan') {
             steps {
                 dir("${TF_DIR}") {
-                    withEnv([
-                        "AWS_REGION=${AWS_REGION}",
-                        "AWS_DEFAULT_REGION=${AWS_DEFAULT_REGION}"
-                    ]) {
-                        sh 'terraform plan -out=tfplan'
-                    }
+                    sh 'terraform plan -out=tfplan'
                 }
             }
         }
+
         stage('Debug AWS') {
             steps {
                 sh '''
                 which aws
                 aws --version
+                aws sts get-caller-identity
                 '''
             }
         }
-        
 
-
-        // ✅ Approval only for PROD
         stage('Approval') {
             when {
                 expression {
-                    return env.ENV == 'prod'
+                    env.ENV == 'prod'
                 }
             }
             steps {
@@ -116,31 +107,22 @@ pipeline {
         stage('Terraform Apply') {
             steps {
                 dir("${TF_DIR}") {
-                    withEnv([
-                        "AWS_REGION=${AWS_REGION}",
-                        "AWS_DEFAULT_REGION=${AWS_DEFAULT_REGION}"
-                    ]) {
-                        sh 'terraform apply -auto-approve tfplan'
-                    }
+                    sh 'terraform apply -auto-approve tfplan'
                 }
+            }
+        }
+
+        stage('Configure Kubeconfig') {
+            steps {
+                sh """
+                mkdir -p ~/.kube
+                aws eks update-kubeconfig \
+                    --region ${AWS_REGION} \
+                    --name retail-dev-eksdemo1
+                """
             }
         }
     }
-        stage('Configure Kubeconfig') {
-            steps {
-                withEnv([
-                    "AWS_REGION=${AWS_REGION}",
-                    "AWS_DEFAULT_REGION=${AWS_DEFAULT_REGION}"
-                ]) {
-                    sh """
-                    mkdir -p ~/.kube
-                    /usr/bin/aws eks update-kubeconfig \
-                      --region ${AWS_REGION} \
-                      --name retail-dev-eksdemo1
-                    """
-                }
-            }
-        }
 
     post {
         success {
