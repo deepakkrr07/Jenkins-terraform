@@ -28,11 +28,11 @@ spec:
         # Cheaper, smaller instance families
         - key: karpenter.k8s.aws/instance-family
           operator: In
-          values: ["t2"]  # All burstable, budget-friendly
+          values: ["t3"]  # All burstable, budget-friendly
         # Limit to smaller sizes only
         - key: karpenter.k8s.aws/instance-size
           operator: In
-          values: ["micro", "small", "medium", "large"]  # Caps at t3.medium (2 vCPU, 4GB RAM)
+          values: ["micro", "small"]  # Caps at t3.medium (2 vCPU, 4GB RAM)
         # Must match the AZs where your EKS cluster has subnets configured
         # Karpenter can only launch nodes in AZs with configured VPC subnets
         - key: topology.kubernetes.io/zone
