@@ -3,7 +3,7 @@ pipeline {
 
     environment {
         AWS_REGION = 'ap-southeast-2'
-        TF_DIR = '01_VPC_terraform-manifests'
+        TF_DIR = '02_RetailStore_AWS_Dataplane'
         ENV = 'dev'   // change to prod later or pass as parameter
     }
 
@@ -15,17 +15,30 @@ pipeline {
             }
         }
 
-        stage('Checkout Code') {
+        stage('Checkout Full Repo') {
             steps {
                 checkout scm
             }
         }
 
-        stage('Terraform Format Check') {
+        stage('Verify Tools') {
             steps {
-                dir("${TF_DIR}") {
-                    sh 'terraform fmt -check -recursive'
-                }
+                sh '''
+                terraform version
+                aws --version
+                kubectl version --client
+                '''
+            }
+        }
+
+        stage('Configure Kubeconfig') {
+            steps {
+                sh '''
+                mkdir -p ~/.kube
+                aws eks update-kubeconfig \
+                  --region ${AWS_REGION} \
+                  --name retail-dev-eksdemo1
+                '''
             }
         }
 
@@ -35,7 +48,7 @@ pipeline {
                     sh """
                     terraform init -reconfigure \
                     -backend-config="bucket=jenkins-terraform-statefile-1807" \
-                    -backend-config="key=\${ENV}/vpc/terraform.tfstate" \
+                    -backend-config="key=\${ENV}/awsservices/terraform.tfstate" \
                     -backend-config="region=${AWS_REGION}"
                     """
                 }
@@ -83,9 +96,8 @@ pipeline {
             steps {
                 sh '''
                 echo "✅ Checking AWS resources after destroy..."
-                aws ec2 describe-vpcs --region ${AWS_REGION}
-                aws ec2 describe-subnets --region ${AWS_REGION}
-                aws ec2 describe-route-tables --region ${AWS_REGION}
+                aws eks list-clusters --region ${AWS_REGION}
+                aws ec2 describe-instances --region ${AWS_REGION} --filters "Name=tag:Environment,Values=${ENV}"
                 '''
             }
         }
