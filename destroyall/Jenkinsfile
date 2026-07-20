@@ -2,9 +2,9 @@ pipeline {
     agent any
 
     environment {
-        AWS_REGION = 'ap-southeast-2'
-        TF_DIR = '01_VPC_terraform-manifests'
-        ENV = 'dev'   // change to prod later or pass as parameter
+        AWS_REGION   = 'ap-southeast-2'
+        CLUSTER_NAME = 'retail-dev-eksdemo1'
+        MANIFEST_DIR = 'karpenter_manifestyaml'
     }
 
     stages {
@@ -21,71 +21,48 @@ pipeline {
             }
         }
 
-        stage('Terraform Format Check') {
-            steps {
-                dir("${TF_DIR}") {
-                    sh 'terraform fmt -check -recursive'
-                }
-            }
-        }
-
-        stage('Terraform Init') {
-            steps {
-                dir("${TF_DIR}") {
-                    sh """
-                    terraform init -reconfigure \
-                    -backend-config="bucket=jenkins-terraform-statefile-1807" \
-                    -backend-config="key=\${ENV}/vpc/terraform.tfstate" \
-                    -backend-config="region=${AWS_REGION}"
-                    """
-                }
-            }
-        }
-
-        stage('Terraform Validate') {
-            steps {
-                dir("${TF_DIR}") {
-                    sh 'terraform validate'
-                }
-            }
-        }
-
-        stage('Terraform Plan Destroy') {
-            steps {
-                dir("${TF_DIR}") {
-                    sh 'terraform plan -destroy -out=tfdestroy'
-                }
-            }
-        }
-
-        stage('Approval Before Destroy') {
-            when {
-                expression {
-                    return env.ENV == 'prod'
-                }
-            }
-            steps {
-                timeout(time: 10, unit: 'MINUTES') {
-                    input message: "Approve destruction of ${ENV} environment?", ok: "Approve"
-                }
-            }
-        }
-
-        stage('Terraform Destroy') {
-            steps {
-                dir("${TF_DIR}") {
-                    sh 'terraform destroy -auto-approve'
-                }
-            }
-        }
-
-        stage('Verify Cleanup') {
+        stage('Configure Kubeconfig') {
             steps {
                 sh '''
-                echo "✅ Checking AWS resources after destroy..."
-                aws ec2 describe-vpcs --region ${AWS_REGION}
-                aws ec2 describe-subnets --region ${AWS_REGION}
-                aws ec2 describe-route-tables --region ${AWS_REGION}
+                mkdir -p ~/.kube
+                aws eks update-kubeconfig \
+                  --region ${AWS_REGION} \
+                  --name ${CLUSTER_NAME}
+                '''
+            }
+        }
+
+        stage('Verify Cluster') {
+            steps {
+                sh 'kubectl get nodes'
+            }
+        }
+
+        stage('Delete Karpenter Resources') {
+            steps {
+                dir("${MANIFEST_DIR}") {
+                    sh '''
+                    set -e
+                    echo "Deleting Karpenter resources..."
+
+                    kubectl delete -f nodepool.yaml --ignore-not-found
+                    kubectl delete -f 01_ec2nodeclass.yaml --ignore-not-found
+
+                    echo "✅ Karpenter manifests deleted successfully."
+                    '''
+                }
+            }
+        }
+
+        stage('Verify Deletion') {
+            steps {
+                sh '''
+                echo "========== Remaining EC2NodeClasses =========="
+                kubectl get ec2nodeclass || true
+
+                echo ""
+                echo "========== Remaining NodePools =========="
+                kubectl get nodepool || true
                 '''
             }
         }
@@ -93,10 +70,10 @@ pipeline {
 
     post {
         success {
-            echo "✅ Terraform destroy completed successfully for ${ENV} environment."
+            echo "✅ Cleanup completed successfully."
         }
         failure {
-            echo "❌ Terraform destroy failed."
+            echo "❌ Cleanup failed."
         }
     }
 }
