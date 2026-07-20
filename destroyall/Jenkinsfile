@@ -2,10 +2,9 @@ pipeline {
     agent any
 
     environment {
-        AWS_REGION   = 'ap-southeast-2'
-        CLUSTER_NAME = 'retail-dev-eksdemo1'
-        NAMESPACE    = 'retailstore'
-        INGRESS_FILE = '03_RetailStore_Helm_with_Data_Plane/kubernetes/retail-ingress.yaml'
+        AWS_REGION = 'ap-southeast-2'
+        TF_DIR = '02_RetailStore_AWS_Dataplane'
+        ENV = 'dev'   // change to prod later or pass as parameter
     }
 
     stages {
@@ -16,9 +15,19 @@ pipeline {
             }
         }
 
-        stage('Checkout Code') {
+        stage('Checkout Full Repo') {
             steps {
                 checkout scm
+            }
+        }
+
+        stage('Verify Tools') {
+            steps {
+                sh '''
+                terraform version
+                aws --version
+                kubectl version --client
+                '''
             }
         }
 
@@ -27,55 +36,68 @@ pipeline {
                 sh '''
                 mkdir -p ~/.kube
                 aws eks update-kubeconfig \
-                    --region ${AWS_REGION} \
-                    --name ${CLUSTER_NAME}
+                  --region ${AWS_REGION} \
+                  --name retail-dev-eksdemo1
                 '''
             }
         }
 
-        stage('Delete Ingress') {
+        stage('Terraform Init') {
             steps {
-                sh '''
-                echo "Deleting Ingress resource..."
-                kubectl delete -f ${INGRESS_FILE} --ignore-not-found
-                '''
+                dir("${TF_DIR}") {
+                    sh """
+                    terraform init -reconfigure \
+                    -backend-config="bucket=jenkins-terraform-statefile-1807" \
+                    -backend-config="key=\${ENV}/awsservices/terraform.tfstate" \
+                    -backend-config="region=${AWS_REGION}"
+                    """
+                }
             }
         }
 
-        stage('Wait for ALB Cleanup') {
+        stage('Terraform Validate') {
             steps {
-                sh '''
-                echo "Waiting for ALB controller to clean up..."
-                sleep 60
-                '''
+                dir("${TF_DIR}") {
+                    sh 'terraform validate'
+                }
             }
         }
 
-        stage('Force Delete Orphaned ALB') {
+        stage('Terraform Plan Destroy') {
             steps {
-                sh '''
-                echo "Checking for orphaned ALBs..."
-                LB_ARN=$(aws elbv2 describe-load-balancers --region ${AWS_REGION} \
-                    --query "LoadBalancers[?LoadBalancerName=='retail-store-http-ip-mode'].LoadBalancerArn" \
-                    --output text)
+                dir("${TF_DIR}") {
+                    sh 'terraform plan -destroy -out=tfdestroy'
+                }
+            }
+        }
 
-                if [ -n "$LB_ARN" ]; then
-                    echo "Deleting orphaned ALB: $LB_ARN"
-                    aws elbv2 delete-load-balancer --load-balancer-arn $LB_ARN --region ${AWS_REGION}
-                else
-                    echo "No orphaned ALB found."
-                fi
-                '''
+        stage('Approval Before Destroy') {
+            when {
+                expression {
+                    return env.ENV == 'prod'
+                }
+            }
+            steps {
+                timeout(time: 10, unit: 'MINUTES') {
+                    input message: "Approve destruction of ${ENV} environment?", ok: "Approve"
+                }
+            }
+        }
+
+        stage('Terraform Destroy') {
+            steps {
+                dir("${TF_DIR}") {
+                    sh 'terraform destroy -auto-approve'
+                }
             }
         }
 
         stage('Verify Cleanup') {
             steps {
                 sh '''
-                echo "Verifying ALB deletion..."
-                aws elbv2 describe-load-balancers --region ${AWS_REGION} \
-                    --query "LoadBalancers[?LoadBalancerName=='retail-store-http-ip-mode']" \
-                    --output table || true
+                echo "✅ Checking AWS resources after destroy..."
+                aws eks list-clusters --region ${AWS_REGION}
+                aws ec2 describe-instances --region ${AWS_REGION} --filters "Name=tag:Environment,Values=${ENV}"
                 '''
             }
         }
@@ -83,10 +105,10 @@ pipeline {
 
     post {
         success {
-            echo "✅ Ingress and ALB cleanup completed successfully."
+            echo "✅ Terraform destroy completed successfully for ${ENV} environment."
         }
         failure {
-            echo "❌ Cleanup failed — check ALB controller logs or AWS console."
+            echo "❌ Terraform destroy failed."
         }
     }
 }
