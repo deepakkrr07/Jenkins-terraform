@@ -1,11 +1,18 @@
 pipeline {
     agent any
 
+    parameters {
+        choice(
+            name: 'APP_VERSION',
+            choices: ['v1', 'v2'],
+            description: 'Select Retail Store application version'
+        )
+    }
+
     environment {
         AWS_REGION   = 'ap-southeast-2'
         CLUSTER_NAME = 'retail-dev-eksdemo1'
         NAMESPACE    = 'retailstore'
-        INGRESS_FILE = '03_RetailStore_Helm_with_Data_Plane/kubernetes/retail-ingress.yaml'
     }
 
     stages {
@@ -22,10 +29,26 @@ pipeline {
             }
         }
 
+        stage('Set Helm Chart Path') {
+            steps {
+                script {
+                    if (params.APP_VERSION == 'v1') {
+                        env.HELM_DIR = "03_RetailStore_Helm_with_Data_Plane/01_retailstore_charts_updates/charts_v1.0.0"
+                    } else {
+                        env.HELM_DIR = "03_RetailStore_Helm_with_Data_Plane/01_retailstore_charts_updates/charts_v2.0.0"
+                    }
+
+                    echo "Selected Version : ${params.APP_VERSION}"
+                    echo "Helm Directory   : ${env.HELM_DIR}"
+                }
+            }
+        }
+
         stage('Configure Kubeconfig') {
             steps {
                 sh '''
                 mkdir -p ~/.kube
+
                 aws eks update-kubeconfig \
                     --region ${AWS_REGION} \
                     --name ${CLUSTER_NAME}
@@ -33,49 +56,71 @@ pipeline {
             }
         }
 
-        stage('Delete Ingress') {
+        stage('Verify Cluster') {
             steps {
                 sh '''
-                echo "Deleting Ingress resource..."
-                kubectl delete -f ${INGRESS_FILE} --ignore-not-found
+                kubectl get nodes
                 '''
             }
         }
 
-        stage('Wait for ALB Cleanup') {
+        stage('Deploy Retail Store') {
+            steps {
+                dir("${HELM_DIR}") {
+                    sh '''
+                    set -e
+
+                    echo "Deploying Retail Store ${APP_VERSION}"
+
+                    for chart in */ ; do
+
+                        APP=$(basename "$chart")
+
+                        echo "------------------------------------------"
+                        echo "Deploying $APP"
+                        echo "------------------------------------------"
+
+                        helm upgrade --install "$APP" "$chart" \
+                            --namespace ${NAMESPACE} \
+                            --create-namespace \
+                            --wait
+
+                        echo "$APP deployment completed"
+
+                    done
+                    '''
+                }
+            }
+        }
+
+        stage('Deploy Ingress') {
             steps {
                 sh '''
-                echo "Waiting for ALB controller to clean up..."
-                sleep 60
+                kubectl apply -f 03_RetailStore_Helm_with_Data_Plane/kubernetes/retail-ingress.yaml
                 '''
             }
         }
 
-        stage('Force Delete Orphaned ALB') {
+        stage('Verify Deployment') {
             steps {
                 sh '''
-                echo "Checking for orphaned ALBs..."
-                LB_ARN=$(aws elbv2 describe-load-balancers --region ${AWS_REGION} \
-                    --query "LoadBalancers[?LoadBalancerName=='retail-store-http-ip-mode'].LoadBalancerArn" \
-                    --output text)
+                echo "========== Helm Releases =========="
+                helm list -n ${NAMESPACE}
 
-                if [ -n "$LB_ARN" ]; then
-                    echo "Deleting orphaned ALB: $LB_ARN"
-                    aws elbv2 delete-load-balancer --load-balancer-arn $LB_ARN --region ${AWS_REGION}
-                else
-                    echo "No orphaned ALB found."
-                fi
-                '''
-            }
-        }
+                echo ""
 
-        stage('Verify Cleanup') {
-            steps {
-                sh '''
-                echo "Verifying ALB deletion..."
-                aws elbv2 describe-load-balancers --region ${AWS_REGION} \
-                    --query "LoadBalancers[?LoadBalancerName=='retail-store-http-ip-mode']" \
-                    --output table || true
+                echo "========== Pods =========="
+                kubectl get pods -n ${NAMESPACE}
+
+                echo ""
+
+                echo "========== Services =========="
+                kubectl get svc -n ${NAMESPACE}
+
+                echo ""
+
+                echo "========== Deployments =========="
+                kubectl get deploy -n ${NAMESPACE}
                 '''
             }
         }
@@ -83,10 +128,11 @@ pipeline {
 
     post {
         success {
-            echo "✅ Ingress and ALB cleanup completed successfully."
+            echo "Retail Store ${params.APP_VERSION} deployed successfully."
         }
+
         failure {
-            echo "❌ Cleanup failed — check ALB controller logs or AWS console."
+            echo "Retail Store deployment failed."
         }
     }
 }
