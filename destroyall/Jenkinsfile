@@ -4,7 +4,8 @@ pipeline {
     environment {
         AWS_REGION   = 'ap-southeast-2'
         CLUSTER_NAME = 'retail-dev-eksdemo1'
-        MANIFEST_DIR = 'karpenter_manifestyaml'
+        NAMESPACE    = 'retailstore'
+        INGRESS_FILE = '03_RetailStore_Helm_with_Data_Plane/kubernetes/retail-ingress.yaml'
     }
 
     stages {
@@ -26,43 +27,55 @@ pipeline {
                 sh '''
                 mkdir -p ~/.kube
                 aws eks update-kubeconfig \
-                  --region ${AWS_REGION} \
-                  --name ${CLUSTER_NAME}
+                    --region ${AWS_REGION} \
+                    --name ${CLUSTER_NAME}
                 '''
             }
         }
 
-        stage('Verify Cluster') {
-            steps {
-                sh 'kubectl get nodes'
-            }
-        }
-
-        stage('Delete Karpenter Resources') {
-            steps {
-                dir("${MANIFEST_DIR}") {
-                    sh '''
-                    set -e
-                    echo "Deleting Karpenter resources..."
-
-                    kubectl delete -f nodepool.yaml --ignore-not-found
-                    kubectl delete -f 01_ec2nodeclass.yaml --ignore-not-found
-
-                    echo "✅ Karpenter manifests deleted successfully."
-                    '''
-                }
-            }
-        }
-
-        stage('Verify Deletion') {
+        stage('Delete Ingress') {
             steps {
                 sh '''
-                echo "========== Remaining EC2NodeClasses =========="
-                kubectl get ec2nodeclass || true
+                echo "Deleting Ingress resource..."
+                kubectl delete -f ${INGRESS_FILE} --ignore-not-found
+                '''
+            }
+        }
 
-                echo ""
-                echo "========== Remaining NodePools =========="
-                kubectl get nodepool || true
+        stage('Wait for ALB Cleanup') {
+            steps {
+                sh '''
+                echo "Waiting for ALB controller to clean up..."
+                sleep 60
+                '''
+            }
+        }
+
+        stage('Force Delete Orphaned ALB') {
+            steps {
+                sh '''
+                echo "Checking for orphaned ALBs..."
+                LB_ARN=$(aws elbv2 describe-load-balancers --region ${AWS_REGION} \
+                    --query "LoadBalancers[?LoadBalancerName=='retail-store-http-ip-mode'].LoadBalancerArn" \
+                    --output text)
+
+                if [ -n "$LB_ARN" ]; then
+                    echo "Deleting orphaned ALB: $LB_ARN"
+                    aws elbv2 delete-load-balancer --load-balancer-arn $LB_ARN --region ${AWS_REGION}
+                else
+                    echo "No orphaned ALB found."
+                fi
+                '''
+            }
+        }
+
+        stage('Verify Cleanup') {
+            steps {
+                sh '''
+                echo "Verifying ALB deletion..."
+                aws elbv2 describe-load-balancers --region ${AWS_REGION} \
+                    --query "LoadBalancers[?LoadBalancerName=='retail-store-http-ip-mode']" \
+                    --output table || true
                 '''
             }
         }
@@ -70,10 +83,10 @@ pipeline {
 
     post {
         success {
-            echo "✅ Cleanup completed successfully."
+            echo "✅ Ingress and ALB cleanup completed successfully."
         }
         failure {
-            echo "❌ Cleanup failed."
+            echo "❌ Cleanup failed — check ALB controller logs or AWS console."
         }
     }
 }
